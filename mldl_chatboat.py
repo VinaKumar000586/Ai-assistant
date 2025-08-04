@@ -1,26 +1,25 @@
 import os
-import gc
- 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
+# from langchain_chroma import Chroma
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_tavily import TavilySearch
 from langchain.memory import ConversationBufferMemory
-
+from langchain_community.vectorstores import FAISS 
 # Load environment variables
 load_dotenv()
 TAVILY_KEY = os.getenv("TAVILY_API_KEY")
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
-gc.collect()
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PDF_FOLDER_PATH = os.path.join(BASE_DIR, "pdfs")  # Folder with PDFs
+PDF_FOLDER_PATH = os.path.join(BASE_DIR, "pdfs")
+FAISS_INDEX_PATH = os.path.join(BASE_DIR, "faiss_index") 
 
 class DocumentLoader:
     def __init__(self, folder_path):
@@ -46,28 +45,55 @@ class TextSplitter:
             chunk_overlap=self.chunk_overlap
         )
         return text_split.split_documents(documents)
+    
 
-# Build vector store IN MEMORY (no persistence)
-print("[INFO] Building vector store from PDFs in memory...")
+
+class VectorStore:
+    def __init__(self, documents):
+        self.documents = documents
+        self.embedding = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=GOOGLE_KEY
+        )
+
+    def create_and_persist(self):
+        vs = FAISS.from_documents(  # Changed to FAISS
+            self.documents,
+            self.embedding
+        )
+        vs.save_local(FAISS_INDEX_PATH)  # Save FAISS index
+        return vs
+        
+    @staticmethod
+    def load():
+        return FAISS.load_local(  # Changed to FAISS
+            FAISS_INDEX_PATH,
+            GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=GOOGLE_KEY
+            ),
+            allow_dangerous_deserialization=True
+        )
+
+# Build vector store
+print("[INFO] Building vector store from PDFs...")
 docs = DocumentLoader(PDF_FOLDER_PATH).load()
 print(f"[INFO] Loaded {len(docs)} documents from {PDF_FOLDER_PATH}")
 
 split_docs = TextSplitter().split(docs)
 print(f"[INFO] Split into {len(split_docs)} chunks.")
 
-VECTOR_STORE = Chroma.from_documents(
+VECTOR_STORE = FAISS.from_documents(  # Changed to FAISS
     split_docs,
     GoogleGenerativeAIEmbeddings(
         model="models/embedding-001",
         google_api_key=GOOGLE_KEY
-    ),
-    collection_name='Book_collection',
-    persist_directory=None  # Critical change - forces in-memory mode
+    )
 )
-print("[INFO] Vector store ready in memory.")
+print("[INFO] Vector store ready.")
 
 class SmartSearch:
-    def __init__(self, query, memory):
+    def __init__(self, query,memory):
         self.query = query
         self.vector_store = VECTOR_STORE
         self.memory = memory
@@ -100,11 +126,13 @@ Question:
 {question}
 """)
 
-    # [Rest of your SmartSearch class remains unchanged]
+        
+    # Detect if question is asking for code
     def _needs_code(self, question: str) -> bool:
         code_keywords = ["code", "script", "example", "snippet", "program", "implementation"]
         return any(word in question.lower() for word in code_keywords)
     
+    # Search web if local fails
     def _search_web(self, question):
         web_result = self.web_search.run(question)
 
@@ -122,6 +150,7 @@ Question:
 
         return str(web_result)
     
+    # Get context from local DB, else web
     def _get_context(self, question):
         retriever = self.vector_store.as_retriever(search_kwargs={"k": 5})
         local_result = retriever.invoke(question)
@@ -132,6 +161,7 @@ Question:
 
         return "\n\n".join(doc.page_content for doc in local_result)
 
+    # Search function with LLM chain
     def search(self):
         extra_instructions = """
 If the answer requires code:
@@ -152,6 +182,8 @@ If the answer requires code:
         )
 
         return chain.invoke({"question": self.query})
+    
+
 
 if __name__ == "__main__":
     memory = ConversationBufferMemory(memory_key="history", return_messages=True)
@@ -164,6 +196,4 @@ if __name__ == "__main__":
 
         search_tool = SmartSearch(query, memory)
         answer = search_tool.search()
-
         print(f"\n💡 Answer:\n{answer}\n")
-
