@@ -10,15 +10,14 @@ from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_tavily import TavilySearch
 from langchain.memory import ConversationBufferMemory
+
 # Load environment variables
 load_dotenv()
 TAVILY_KEY = os.getenv("TAVILY_API_KEY")
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
 
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PDF_FOLDER_PATH = os.path.join(BASE_DIR, "pdfs")  # Folder with PDFs
-CHROMA_DB_PATH = os.path.join(BASE_DIR, "Chroma_db")
 
 class DocumentLoader:
     def __init__(self, folder_path):
@@ -44,39 +43,8 @@ class TextSplitter:
             chunk_overlap=self.chunk_overlap
         )
         return text_split.split_documents(documents)
-    
 
-class VectorStore:
-    def __init__(self, documents):
-        self.documents = documents
-        self.embedding = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=GOOGLE_KEY
-        )
-
-    def create_and_persist(self):
-        vs = Chroma.from_documents(
-            self.documents,
-            self.embedding,
-            persist_directory='Chroma_db',
-            collection_name='Book_collection'
-        )
-        vs.persist()
-        return vs
-        
-    @staticmethod
-    def load():
-        return Chroma(
-            persist_directory='Chroma_db',
-            collection_name='Book_collection',
-            embedding_function=GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001",
-                google_api_key=GOOGLE_KEY
-            )
-        )
-        
- # Ensure DB exists
-# Build vector store directly in memory (better for deployment)
+# Build vector store IN MEMORY (no persistence)
 print("[INFO] Building vector store from PDFs in memory...")
 docs = DocumentLoader(PDF_FOLDER_PATH).load()
 print(f"[INFO] Loaded {len(docs)} documents from {PDF_FOLDER_PATH}")
@@ -90,13 +58,13 @@ VECTOR_STORE = Chroma.from_documents(
         model="models/embedding-001",
         google_api_key=GOOGLE_KEY
     ),
-    collection_name='Book_collection'
+    collection_name='Book_collection',
+    persist_directory=None  # Critical change - forces in-memory mode
 )
 print("[INFO] Vector store ready in memory.")
 
-
 class SmartSearch:
-    def __init__(self, query,memory):
+    def __init__(self, query, memory):
         self.query = query
         self.vector_store = VECTOR_STORE
         self.memory = memory
@@ -129,13 +97,11 @@ Question:
 {question}
 """)
 
-        
-    # Detect if question is asking for code
+    # [Rest of your SmartSearch class remains unchanged]
     def _needs_code(self, question: str) -> bool:
         code_keywords = ["code", "script", "example", "snippet", "program", "implementation"]
         return any(word in question.lower() for word in code_keywords)
     
-    # Search web if local fails
     def _search_web(self, question):
         web_result = self.web_search.run(question)
 
@@ -153,7 +119,6 @@ Question:
 
         return str(web_result)
     
-    # Get context from local DB, else web
     def _get_context(self, question):
         retriever = self.vector_store.as_retriever(search_kwargs={"k": 5})
         local_result = retriever.invoke(question)
@@ -164,7 +129,6 @@ Question:
 
         return "\n\n".join(doc.page_content for doc in local_result)
 
-    # Search function with LLM chain
     def search(self):
         extra_instructions = """
 If the answer requires code:
@@ -185,8 +149,6 @@ If the answer requires code:
         )
 
         return chain.invoke({"question": self.query})
-    
-
 
 if __name__ == "__main__":
     memory = ConversationBufferMemory(memory_key="history", return_messages=True)
@@ -199,5 +161,5 @@ if __name__ == "__main__":
 
         search_tool = SmartSearch(query, memory)
         answer = search_tool.search()
-        print(f"\n💡 Answer:\n{answer}\n")
 
+        print(f"\n💡 Answer:\n{answer}\n")
