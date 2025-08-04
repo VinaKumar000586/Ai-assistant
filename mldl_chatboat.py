@@ -91,7 +91,7 @@ VECTOR_STORE = Chroma.from_documents(
     ),
     collection_name='Book_collection'
 )
-print("[INFO] Vector store ready in memory.") for better performance 
+print("[INFO] Vector store ready in memory.") #for better performance 
 
 class SmartSearch:
     def __init__(self, query,memory):
@@ -199,3 +199,4 @@ if __name__ == "__main__":
         answer = search_tool.search()
 
         print(f"\n💡 Answer:\n{answer}\n")
+
