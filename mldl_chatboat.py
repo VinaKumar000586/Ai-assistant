@@ -75,16 +75,23 @@ class VectorStore:
             )
         )
         
- # Ensure DB exists
-if not os.path.exists(CHROMA_DB_PATH):
-    print("[INFO] No vector store found. Creating one...")
-    docs = DocumentLoader(PDF_FOLDER_PATH).load()
-    print(f"[INFO] Loaded {len(docs)} documents from {PDF_FOLDER_PATH}")
-    split_docs = TextSplitter().split(docs)
-    print(f"[INFO] Split into {len(split_docs)} chunks.")
-    VectorStore(split_docs).create_and_persist()
-    print("[INFO] Vector store created successfully.")
-VECTOR_STORE = VectorStore.load()    # for better performance 
+# Build vector store directly in memory (better for deployment)
+print("[INFO] Building vector store from PDFs in memory...")
+docs = DocumentLoader(PDF_FOLDER_PATH).load()
+print(f"[INFO] Loaded {len(docs)} documents from {PDF_FOLDER_PATH}")
+
+split_docs = TextSplitter().split(docs)
+print(f"[INFO] Split into {len(split_docs)} chunks.")
+
+VECTOR_STORE = Chroma.from_documents(
+    split_docs,
+    GoogleGenerativeAIEmbeddings(
+        model="models/embedding-001",
+        google_api_key=GOOGLE_KEY
+    ),
+    collection_name='Book_collection'
+)
+print("[INFO] Vector store ready in memory.") for better performance 
 
 class SmartSearch:
     def __init__(self, query,memory):
@@ -190,4 +197,5 @@ if __name__ == "__main__":
 
         search_tool = SmartSearch(query, memory)
         answer = search_tool.search()
+
         print(f"\n💡 Answer:\n{answer}\n")
