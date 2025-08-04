@@ -1,6 +1,6 @@
 import streamlit as st
 from langchain.memory import ConversationBufferMemory
-from mldl_chatboat import SmartSearch  # Import your SmartSearch class
+from mldl_chatboat import SmartSearch   # Import your SmartSearch class
 import time
 
 st.set_page_config(
@@ -59,4 +59,5 @@ st.markdown("---")
 st.markdown(
     "<div style='text-align:center; color:gray;'>Built with ❤️ using LangChain, Streamlit & Gemini</div>",
     unsafe_allow_html=True
+
 )
