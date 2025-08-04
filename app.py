@@ -1,4 +1,6 @@
 import streamlit as st
+import sys
+import faiss
 from langchain.memory import ConversationBufferMemory
 from mldl_chatboat import SmartSearch   # Import your SmartSearch class
 import time
@@ -61,3 +63,4 @@ st.markdown(
     unsafe_allow_html=True
 
 )
+
