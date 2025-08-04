@@ -1,4 +1,6 @@
 import os
+import gc
+ 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.messages import HumanMessage
@@ -15,6 +17,7 @@ from langchain.memory import ConversationBufferMemory
 load_dotenv()
 TAVILY_KEY = os.getenv("TAVILY_API_KEY")
 GOOGLE_KEY = os.getenv("GOOGLE_API_KEY")
+gc.collect()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PDF_FOLDER_PATH = os.path.join(BASE_DIR, "pdfs")  # Folder with PDFs
@@ -163,3 +166,4 @@ if __name__ == "__main__":
         answer = search_tool.search()
 
         print(f"\n💡 Answer:\n{answer}\n")
+
